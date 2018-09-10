@@ -93,14 +93,14 @@ for i = 1:length(SubjectIDs)
 
         
         %% finished marking fiducials, save the results
-        save(output_file_nas_lpa_rpa, 'nas', 'lpa', 'rpa');
+        %save(output_file_nas_lpa_rpa, 'nas', 'lpa', 'rpa');
         save mri_realigned mri_realigned
         print('initial_realign', '-dpng', '-r100');
                 
         % get transformation matrix of individual MRI
         vox2head = (mri.transform);
 
-        % transform fiducial coordinates into MRI head coordinates
+        % transform voxel indices into MRI head coordinates
         head_Nas          = ft_warp_apply(vox2head, nas, 'homogenous'); % nasion
         head_Lpa          = ft_warp_apply(vox2head, lpa, 'homogenous'); % Left preauricular
         head_Rpa          = ft_warp_apply(vox2head, rpa, 'homogenous'); % Right preauricular
