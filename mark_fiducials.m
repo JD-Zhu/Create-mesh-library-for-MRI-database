@@ -1,15 +1,31 @@
 %=================================================
-% PLEASE SPECIFY THE LOCATION OF THE MRI DATABASE:
+% 1. PLEASE SPECIFY THE LOCATION OF THE MRI DATABASE:
 DataFolder = 'E:\No-Backup\MRI_databases\SLIM\';
 
 % Or use GUI folder selection
 %DataFolder = uigetdir('E:\No-Backup\MRI_databases\SLIM\', 'Select the folder containing the MRI database');
 %DataFolder = [DataFolder '\'];
+
+% 2. PLEASE SPECIFY THE MRI FILENAME:
+MRI_filename = 'SLIM-T1w.nii';
+
 %=================================================
-%%
+
+%% start
 fprintf('\nLocation of MRI database:\n    %s\n', DataFolder);
 
-% loop through all subjects
+% load the example headshape and sensor positions (for plotting in quality check)
+hsp = ft_read_headshape([DataFolder '\2784_AG_ME155_2017_11_17.hsp']);
+hsp = ft_convert_units(hsp, 'mm');
+sensors = ft_read_sens([DataFolder '\2784_AG_ME155_2017_11_17_test.con']);
+sensors = ft_convert_units(sensors, 'mm');
+
+% flag for redoing a subject - when set to true, quit the script & rerun (to
+% redo the last subject)
+redo = false;
+
+
+%% loop through all subjects
 SubjectIDs = dir([DataFolder 'sub-*']);
 SubjectIDs = {SubjectIDs.name}; % extract the names into a cell array
 
@@ -21,13 +37,17 @@ for i = 1:length(SubjectIDs)
     output_file_ac_pc = [SubjectFolder 'ac_pc.mat'];
     processed_this_round = false;
     
-    % mark nas/lpa/rpa for this MRI & save
+    
+    %% use nas/lpa/rpa coordinates
+    
     if (exist(output_file_nas_lpa_rpa, 'file') ~= 2)    
         processed_this_round = true;
         fprintf(['\nCURRENT SUBJECT: ' SubjectID ' (mark nas/lpa/rpa)\n\n']);
         
-        % read the DICOM files 
-        mri = ft_read_mri([SubjectFolder 'SLIM-T1w.nii']);
+        % read the Nifti file
+        mri = ft_read_mri([SubjectFolder MRI_filename]);
+        
+        %% Steps 1~2: mark fiducials & realign to 'bti' coordinate system
 
         repeat = true;
         while (repeat)
@@ -36,7 +56,7 @@ for i = 1:length(SubjectIDs)
             % the ear markers. Then finish with "q".
             cfg = [];
             cfg.method = 'interactive';
-            cfg.coordsys = 'bti';
+            cfg.coordsys = 'bti'; % realign to 'bti' coordinate system
             mri_realigned = ft_volumerealign(cfg, mri);
 
             % read out the fiducial coordinates & save
@@ -54,17 +74,56 @@ for i = 1:length(SubjectIDs)
             end
         end
         
-        % finished marking fiducials for this MRI, save the results
-        save(output_file_nas_lpa_rpa, 'mri_realigned', 'nas', 'lpa', 'rpa');
+        %% Quality check: see if realigned MRI is consistent 
+        % with headshape points and sensor locations
+        ft_determine_coordsys(mri_realigned, 'interactive', 'no');
+        hold on;
+        drawnow; % workaround to prevent some MATLAB versions (2012b and 2014b) from crashing
+        ft_plot_headshape(hsp, 'vertexsize',4);
+        ft_plot_sens(sensors);
+        drawnow; view([190 0]);
+        
+        msg = sprintf('\nAre you happy with the results?\n');
+        answer = questdlg(msg, 'Results ok?', 'Yes, keep going', 'No, redo this subject', 'Yes, keep going'); % set 'yes' as default
+        switch answer
+            case 'No, redo this subject'
+                redo = true;
+                break;
+        end
+
+        
+        %% finished marking fiducials, save the results
+        save(output_file_nas_lpa_rpa, 'nas', 'lpa', 'rpa');
+        save mri_realigned mri_realigned
+        print('initial_realign', '-dpng', '-r100');
+                
+        % get transformation matrix of individual MRI
+        vox2head = (mri.transform);
+
+        % transform fiducial coordinates into MRI head coordinates
+        head_Nas          = ft_warp_apply(vox2head, nas, 'homogenous'); % nasion
+        head_Lpa          = ft_warp_apply(vox2head, lpa, 'homogenous'); % Left preauricular
+        head_Rpa          = ft_warp_apply(vox2head, rpa, 'homogenous'); % Right preauricular
+
+        % Save marked fiducials for later
+        fids = [head_Nas; head_Lpa; head_Rpa];
+        save('fiducials.txt', 'fids', '-ascii', '-double', '-tabs')
+
+
+        %% Step 3: Create scalp mesh
+        % see single subject script ...
+
     end
     
-    % mark AC/PC for this MRI & save
+    
+    %% use AC/PC coordinates
+    
     if (exist(output_file_ac_pc, 'file') ~= 2)    
         processed_this_round = true;
         fprintf(['\nCURRENT SUBJECT: ' SubjectID ' (mark AC/PC/xzpoint)\n\n']);
         
-        % read the DICOM files 
-        mri = ft_read_mri([SubjectFolder 'SLIM-T1w.nii']);
+        % read the Nifti file
+        mri = ft_read_mri([SubjectFolder MRI_filename]);
 
         repeat = true;
         while (repeat)
@@ -111,21 +170,24 @@ for i = 1:length(SubjectIDs)
     %}
 
 
-    % ask the user: keep going or take a break?
+    %% ask the user: keep going or take a break?
     % this allows us to terminate gracefully (not leaving behind open
     % windows etc)
     if (processed_this_round)
-        msg = sprintf('\nJust completed: %s\nTotal %d subjects completed so far!\n\nWould you like to keep going?', SubjectID, i);
-        answer = questdlg(msg, 'Next subject', 'Yes', 'No', 'Yes'); % set 'yes' as default
+        msg = sprintf('\nJust completed: %s\nTotal %d subjects completed so far!\n\nWould you like to start the next subject?', SubjectID, i);
+        answer = questdlg(msg, 'Next subject', 'Yes', 'No, I want to take a break', 'Yes'); % set 'yes' as default
         switch answer
-            case 'No'
+            case 'No, I want to take a break'
                 break;
         end
     end    
 end
 
-% check if the entire database is finished, or just done for the day
-if i >= length(SubjectIDs) 
+% check if the entire database is finished, or just done for the day, or
+% just redoing a subject
+if redo
+    msgbox('The program will terminate now.\nPlease rerun the script to redo the last subject!', 'Redo last subject');
+elseif i >= length(SubjectIDs) 
     msgbox('Congratulations - you have finished processing the entire MRI database!', 'Congratulations');
 else
     msgbox('Done for now? You can resume next time by running the script again (your progress has been saved).', 'Done for now');
