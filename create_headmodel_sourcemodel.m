@@ -6,13 +6,16 @@
 % John Richards (USC, USA) retains all copyrights to the templates.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-list_of_subs = listFolders('E:\PACE\SLIM-database-marked');
+% specify path to marked MRI database & location to save QC output
+MRI_DATABASE = 'D:\Judy\PACE\SLIM_marked\';
+QC_DIR = [MRI_DATABASE '..\qc'];
+
+list_of_subs = listFolders(MRI_DATABASE);
 
 for sub = 1:length(list_of_subs)
     try
         %% Set up directory to hold info for each age
-        dir_for_loop = ['E:\PACE\SLIM-database-marked\'...
-            list_of_subs{sub}];
+        dir_for_loop = [MRI_DATABASE list_of_subs{sub}];
         
         cd(dir_for_loop)
         
@@ -92,7 +95,7 @@ for sub = 1:length(list_of_subs)
         fprintf('Finished... CHECK for quality control\n');
         
     catch
-        cd('E:\PACE\qc')
+        cd(QC_DIR)
         txt_to_save = [list_of_subs{sub} ' could not be saved'];
         save(sprintf('%s',list_of_subs{sub}),'txt_to_save');
         clear txt_to_save
@@ -101,7 +104,7 @@ end
 
 
 %% Example call to child_MEMES
-
+%{
 dir_name    = '/Users/44737483/Documents/scripts_mcq/child_test/2913/'
 elpfile     = '/Users/44737483/Documents/scripts_mcq/child_test/2913/2913_ES_ME125_2018_02_24.elp';
 hspfile     = '/Users/44737483/Documents/scripts_mcq/child_test/2913/2913_ES_ME125_2018_02_24.hsp';
@@ -111,6 +114,4 @@ mrkfile     = '/Users/44737483/Documents/scripts_mcq/child_test/2913/2913_ES_ME1
 path_to_MRI_library = '/Users/44737483/Documents/scripts_mcq/MRIDataBase_JohnRichards_USC/database_for_MEMES/';
 
 child_MEMES(dir_name,elpfile,hspfile,confile,mrkfile,path_to_MRI_library,'')
-
-%%
-
+%}
